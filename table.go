@@ -15,8 +15,10 @@
 package nftables
 
 import (
+	"encoding/binary"
 	"fmt"
 
+	"github.com/google/nftables/binaryutil"
 	"github.com/mdlayher/netlink"
 	"golang.org/x/sys/unix"
 )
@@ -49,13 +51,21 @@ type Table struct {
 	Family TableFamily
 }
 
+func (t *Table) flags2netlinkAttr() netlink.Attribute { //это адов костыль
+	flags := []byte{0, 0, 0, 0}
+	if t.Flags != 0 {
+		binary.BigEndian.PutUint32(flags, t.Flags)
+	}
+	return netlink.Attribute{Type: unix.NFTA_TABLE_FLAGS, Data: flags}
+}
+
 // DelTable deletes a specific table, along with all chains/rules it contains.
 func (cc *Conn) DelTable(t *Table) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	data := cc.marshalAttr([]netlink.Attribute{
 		{Type: unix.NFTA_TABLE_NAME, Data: []byte(t.Name + "\x00")},
-		{Type: unix.NFTA_TABLE_FLAGS, Data: []byte{0, 0, 0, 0}},
+		t.flags2netlinkAttr(),
 	})
 	cc.messages = append(cc.messages, netlink.Message{
 		Header: netlink.Header{
@@ -71,7 +81,7 @@ func (cc *Conn) addTable(t *Table, flag netlink.HeaderFlags) *Table {
 	defer cc.mu.Unlock()
 	data := cc.marshalAttr([]netlink.Attribute{
 		{Type: unix.NFTA_TABLE_NAME, Data: []byte(t.Name + "\x00")},
-		{Type: unix.NFTA_TABLE_FLAGS, Data: []byte{0, 0, 0, 0}},
+		t.flags2netlinkAttr(),
 	})
 	cc.messages = append(cc.messages, netlink.Message{
 		Header: netlink.Header{
@@ -202,9 +212,14 @@ func tableFromMsg(msg netlink.Message) (*Table, error) {
 		case unix.NFTA_TABLE_NAME:
 			t.Name = ad.String()
 		case unix.NFTA_TABLE_USE:
-			t.Use = ad.Uint32()
+			t.Use = binaryutil.BigEndian.Uint32(ad.Bytes())
 		case unix.NFTA_TABLE_FLAGS:
-			t.Flags = ad.Uint32()
+			if t.Flags = ad.Uint32(); t.Flags != 0 { //это адов костыль
+				f0 := binaryutil.NativeEndian.Uint32(binaryutil.BigEndian.PutUint32(unix.NFT_TABLE_F_DORMANT))
+				if t.Flags&f0 != 0 {
+					t.Flags = unix.NFT_TABLE_F_DORMANT
+				}
+			}
 		}
 	}
 

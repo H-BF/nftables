@@ -103,6 +103,7 @@ type Chain struct {
 	Type     ChainType
 	Policy   *ChainPolicy
 	Device   string
+	Handle   uint64
 }
 
 // AddChain adds the specified Chain. See also
@@ -298,6 +299,8 @@ func chainFromMsg(msg netlink.Message) (*Chain, error) {
 				c.Hooknum, c.Priority, err = hookFromMsg(b)
 				return err
 			})
+		case unix.NFTA_CHAIN_HANDLE:
+			c.Handle = binaryutil.BigEndian.Uint64(ad.Bytes())
 		}
 	}
 
