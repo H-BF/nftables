@@ -267,8 +267,7 @@ func (dpi *Ndpi) protocolsToBitmask() (ret ndpiProtoBitmask, err error) {
 	return ret, err
 }
 
-func (e *Ndpi) marshal(fam byte) ([]byte, error) {
-
+func (e *Ndpi) marshalData(fam byte) ([]byte, error) {
 	var attrs []netlink.Attribute
 	var mask ndpiProtoBitmask
 	var err error
@@ -301,12 +300,14 @@ func (e *Ndpi) marshal(fam byte) ([]byte, error) {
 			Data: binaryutil.BigEndian.PutUint16(e.Flags),
 		})
 	}
+	return netlink.MarshalAttributes(attrs)
+}
 
-	data, err := netlink.MarshalAttributes(attrs)
+func (e *Ndpi) marshal(fam byte) ([]byte, error) {
+	data, err := e.marshalData(fam)
 	if err != nil {
 		return nil, err
 	}
-
 	return netlink.MarshalAttributes([]netlink.Attribute{
 		{Type: unix.NFTA_EXPR_NAME, Data: []byte("ndpi\x00")},
 		{Type: unix.NLA_F_NESTED | unix.NFTA_EXPR_DATA, Data: data},
